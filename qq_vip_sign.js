@@ -1,4 +1,4 @@
-// QQ空间VIP签到脚本 for Quantumult X
+// QQ空间VIP签到脚本 for Quantumult X v5.0
 // 配置步骤：
 // 1. 添加重写规则和MITM
 // 2. 添加定时任务
@@ -98,7 +98,7 @@ function getCookie() {
 }
 
 // ========================= 主执行逻辑 =========================
-if ($request) {
+if (typeof $request !== 'undefined') {
     // 通过重写规则触发，用于获取Cookie
     const requestUrl = $request.url;
     if (requestUrl.includes("qzone.qq.com") || requestUrl.includes("qq.com")) {
@@ -108,6 +108,8 @@ if ($request) {
             $notify(cookieName, "成功", "✅ Cookie已更新");
         }
     }
+    // 必须调用$done()结束请求
+    $done({});
 } else {
     // 手动执行（定时任务或手动运行）
     const cmd = typeof $argument !== "undefined" ? $argument : "sign";
