@@ -1,5 +1,5 @@
-// QQ空间VIP签到 - 优化版
-// 最后更新：2024-06-18
+// QQ空间VIP签到 - 参数修复版
+// 最后更新：2025-07-06
 
 // ======== 环境初始化 ========
 function initEnv() {
@@ -73,17 +73,21 @@ async function signTask(cookie, actId, taskName) {
     const skey = extractSkey(cookie);
     const g_tk = getGTK(skey);
     
+    // 修复关键：使用正确的API路径和参数结构
     const response = await $.post({
-      url: `https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct?g_tk=${g_tk}`,
+      url: `https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct`,
       headers: {
         "Cookie": cookie,
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 QQ/9.1.95.613"
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 QQ/9.1.95.613",
+        "Referer": "https://h5.qzone.qq.com/vip/index"
       },
       body: JSON.stringify({
-        SubActId: actId,
-        ClientPlat: 0,
-        ReportInfo: { traceId: Date.now().toString(36) }
+        subActId: actId, // 注意：改为小写字段名
+        clientPlat: 0,
+        reportInfo: { 
+          traceId: Date.now().toString(36) 
+        }
       })
     });
 
@@ -97,13 +101,13 @@ async function signTask(cookie, actId, taskName) {
   }
 }
 
-// ======== 关键修复函数 ========
+// ======== 响应解析函数 ========
 function parseResponse(body) {
   try {
     const data = JSON.parse(body);
     
-    // 增强错误码处理
-    const errorCode = data.Code ?? data.retcode ?? data.code;
+    // 增强错误码处理（兼容大小写字段）
+    const errorCode = data.Code ?? data.code ?? data.retcode;
     const errorMsg = data.Msg ?? data.msg ?? data.message;
     
     // 处理已签到情况
@@ -150,20 +154,18 @@ function formatResult(taskName, result) {
 }
 
 // ======== 工具函数 ========
-// 优化：优先使用p_skey
 function extractSkey(cookie) {
-  // 先尝试匹配p_skey
+  // 优先使用p_skey
   let match = cookie.match(/p_skey=([^;]+)/i);
   if (match) return match[1];
   
-  // 再尝试匹配skey
+  // 其次使用skey
   match = cookie.match(/skey=([^;]+)/i);
   if (match) return match[1];
   
   throw new Error("Cookie中缺少p_skey和skey");
 }
 
-// GTK计算函数（与您提供的算法一致）
 function getGTK(skey) {
   let hash = 5381;
   for (let i = 0, len = skey.length; i < len; i++) {
