@@ -1,4 +1,4 @@
-// QQ空间VIP签到 - 优化错误处理版
+// QQ空间VIP签到 - 优化版
 // 最后更新：2024-06-18
 
 // ======== 环境初始化 ========
@@ -150,15 +150,23 @@ function formatResult(taskName, result) {
 }
 
 // ======== 工具函数 ========
+// 优化：优先使用p_skey
 function extractSkey(cookie) {
-  const match = cookie.match(/(p_skey|skey)=([^;]+)/i);
-  if (!match) throw new Error("Cookie中缺少skey");
-  return match[2];
+  // 先尝试匹配p_skey
+  let match = cookie.match(/p_skey=([^;]+)/i);
+  if (match) return match[1];
+  
+  // 再尝试匹配skey
+  match = cookie.match(/skey=([^;]+)/i);
+  if (match) return match[1];
+  
+  throw new Error("Cookie中缺少p_skey和skey");
 }
 
+// GTK计算函数（与您提供的算法一致）
 function getGTK(skey) {
   let hash = 5381;
-  for (let i = 0; i < skey.length; i++) {
+  for (let i = 0, len = skey.length; i < len; i++) {
     hash += (hash << 5) + skey.charCodeAt(i);
   }
   return hash & 0x7fffffff;
