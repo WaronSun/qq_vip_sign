@@ -80,7 +80,7 @@ async function sign() {
         const data = JSON.parse(response.body);
         if (data.Code === 0) {
             $notify(cookieName, "成功", "🎉 签到成功！");
-        } else if (data.Code === -4020 && data.Msg.includes("用户日限制")) {
+        } else if (data.Code === -4020 && data.Msg && data.Msg.includes("用户日限制")) {
             $notify(cookieName, "成功", "✅ 今日已签到");
         } else {
             $notify(cookieName, "失败", `❌ ${data.Msg || "未知错误"}`);
@@ -97,12 +97,11 @@ function getCookie() {
     $task.openUrl("https://qzone.qq.com");
 }
 
-// 主入口
-if (typeof $task !== "undefined") {
+// ========================= 主执行逻辑 =========================
+if ($request) {
+    // 通过重写规则触发，用于获取Cookie
     const requestUrl = $request.url;
-    
-    // 如果是QQ空间请求，保存Cookie
-    if (requestUrl.includes("qzone.qq.com")) {
+    if (requestUrl.includes("qzone.qq.com") || requestUrl.includes("qq.com")) {
         const cookie = $request.headers["Cookie"] || $request.headers["cookie"];
         if (cookie) {
             $prefs.setValueForKey(cookie, cookieKey);
@@ -110,7 +109,7 @@ if (typeof $task !== "undefined") {
         }
     }
 } else {
-    // 手动执行
+    // 手动执行（定时任务或手动运行）
     const cmd = typeof $argument !== "undefined" ? $argument : "sign";
     if (cmd === "getCookie") {
         getCookie();
