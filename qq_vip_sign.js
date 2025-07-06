@@ -1,30 +1,27 @@
-// QQ空间VIP签到 - 兼容Quantumult X完整版
-// 最后更新：2023-11-20
+// QQ空间VIP签到 - 优化错误处理版
+// 最后更新：2024-06-18
 
 // ======== 环境初始化 ========
 function initEnv() {
   const env = {
-    name: "QQ空间签到",
-    // 存储操作
     getdata: (key) => {
-      if (typeof $prefs !== 'undefined') return $prefs.valueForKey(key); // QX
-      if (typeof $persistentStore !== 'undefined') return $persistentStore.read(key); // Surge/Loon
-      return localStorage.getItem(key); // 浏览器环境
+      if (typeof $prefs !== 'undefined') return $prefs.valueForKey(key);
+      if (typeof $persistentStore !== 'undefined') return $persistentStore.read(key);
+      return localStorage.getItem(key);
     },
     setdata: (val, key) => {
       if (typeof $prefs !== 'undefined') return $prefs.setValueForKey(val, key);
       if (typeof $persistentStore !== 'undefined') return $persistentStore.write(val, key);
       return localStorage.setItem(key, val);
     },
-    // 网络请求
     post: (options) => new Promise((resolve) => {
-      if (typeof $task !== 'undefined') { // QX
+      if (typeof $task !== 'undefined') {
         $task.fetch(options).then(resp => resolve({
           status: resp.statusCode,
           body: resp.body,
           headers: resp.headers
         }));
-      } else if (typeof $httpClient !== 'undefined') { // Surge/Loon
+      } else if (typeof $httpClient !== 'undefined') {
         $httpClient.post(options, (_, resp, body) => resolve({
           status: resp.status || resp.statusCode,
           body,
@@ -32,10 +29,9 @@ function initEnv() {
         }));
       }
     }),
-    // 工具方法
     msg: (title, subtitle, body) => {
-      if (typeof $notify !== 'undefined') $notify(title, subtitle, body); // QX
-      if (typeof $notification !== 'undefined') $notification.post(title, subtitle, body); // Surge/Loon
+      if (typeof $notify !== 'undefined') $notify(title, subtitle, body);
+      if (typeof $notification !== 'undefined') $notification.post(title, subtitle, body);
       console.log(`[通知] ${title} - ${subtitle}: ${body}`);
     },
     wait: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
@@ -63,7 +59,7 @@ async function main() {
     const messages = results.map(res => 
       res.status === 'fulfilled' ? res.value.message : `❌ ${res.reason}`
     );
-    $.msg("签到结果", "", messages.join("\n"));
+    $.msg("QQ空间签到结果", "", messages.join("\n"));
     
   } catch (e) {
     $.msg("❌ 脚本异常", e.message);
@@ -87,14 +83,69 @@ async function signTask(cookie, actId, taskName) {
       body: JSON.stringify({
         SubActId: actId,
         ClientPlat: 0,
-        ReportInfo: { traceId: Date.now().toString() }
+        ReportInfo: { traceId: Date.now().toString(36) }
       })
     });
 
+    // 调试输出原始响应
+    console.log(`[${taskName}] 原始响应: ${response.body}`);
+    
     const result = parseResponse(response.body);
     return formatResult(taskName, result);
   } catch (e) {
     throw `${taskName}请求失败: ${e.message}`;
+  }
+}
+
+// ======== 关键修复函数 ========
+function parseResponse(body) {
+  try {
+    const data = JSON.parse(body);
+    
+    // 增强错误码处理
+    const errorCode = data.Code ?? data.retcode ?? data.code;
+    const errorMsg = data.Msg ?? data.msg ?? data.message;
+    
+    // 处理已签到情况
+    if (errorCode === -4020 || errorMsg?.includes("已签到")) {
+      return { status: "already_signed" };
+    }
+    
+    // 处理明确错误
+    if (errorCode && errorCode !== 0) {
+      return { 
+        status: "failed", 
+        msg: errorMsg || `错误码: ${errorCode}` 
+      };
+    }
+    
+    // 处理成功情况
+    if (data.Data?.result === 0 || data.retcode === 0) {
+      return { status: "success" };
+    }
+    
+    // 未知响应结构
+    return { status: "unknown", raw: body };
+    
+  } catch (e) {
+    return { status: "parse_error", raw: body };
+  }
+}
+
+function formatResult(taskName, result) {
+  switch (result.status) {
+    case "success":
+      return { message: `✅ ${taskName}成功` };
+    case "already_signed":
+      return { message: `🔄 ${taskName}今日已签` };
+    case "failed":
+      return { message: `❌ ${taskName}失败: ${result.msg}` };
+    case "parse_error":
+      return { message: `⚠️ ${taskName}响应解析失败` };
+    case "unknown":
+      return { message: `⚠️ ${taskName}未知响应格式` };
+    default:
+      return { message: `⚠️ ${taskName}异常状态` };
   }
 }
 
@@ -113,37 +164,8 @@ function getGTK(skey) {
   return hash & 0x7fffffff;
 }
 
-function parseResponse(body) {
-  try {
-    const data = JSON.parse(body);
-    if (data.Code === -4020 && data.Msg?.includes("用户日限制")) {
-      return { status: "already_signed" };
-    }
-    if (data.Code !== 0) {
-      return { status: "failed", msg: data.Msg || `错误码: ${data.Code}` };
-    }
-    return { status: "success", data: data.Data };
-  } catch (e) {
-    return { status: "parse_error", raw: body };
-  }
-}
-
-function formatResult(taskName, result) {
-  switch (result.status) {
-    case "success":
-      return { message: `✅ ${taskName}成功` };
-    case "already_signed":
-      return { message: `🔄 ${taskName}今日已签` };
-    case "failed":
-      return { message: `❌ ${taskName}失败: ${result.msg}` };
-    default:
-      return { message: `⚠️ ${taskName}异常: 响应格式错误` };
-  }
-}
-
 // ======== 执行入口 ========
 if (typeof $request !== 'undefined') {
-  // 重写模式获取Cookie
   const cookie = $request.headers?.Cookie || $request.headers?.cookie;
   if (cookie && /qzone\.qq\.com/.test($request.url)) {
     $.setdata(cookie, COOKIE_KEY);
@@ -151,6 +173,5 @@ if (typeof $request !== 'undefined') {
   }
   $.done();
 } else {
-  // 定时任务模式
   main();
 }
