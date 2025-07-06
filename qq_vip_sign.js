@@ -1,15 +1,11 @@
-// QQ空间VIP签到脚本 for Quantumult X v6.0
-// 配置步骤：
-// 1. 添加重写规则和MITM
-// 2. 添加定时任务
-// 3. 访问QQ空间获取Cookie
-
+// QQ空间VIP签到脚本 for Quantumult X v7.0
+// 修复日志页面转圈问题
 const cookieName = "QQ空间VIP签到";
 const cookieKey = "qq_vip_cookie";
 const signurl = 'https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct';
 const ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 QQ/9.1.95.613";
 
-// GTK算法（与Python版本一致）
+// GTK算法
 function getGTK(skey) {
     let hash = 5381;
     for (let i = 0; i < skey.length; ++i) {
@@ -38,7 +34,7 @@ async function sign() {
     const cookie = $prefs.valueForKey(cookieKey);
     if (!cookie) {
         $notify(cookieName, "失败", "⚠️ 请先获取Cookie");
-        return;
+        return $done();
     }
     
     try {
@@ -88,6 +84,9 @@ async function sign() {
     } catch (error) {
         $notify(cookieName, "错误", `⚠️ ${error.message || error}`);
     }
+    
+    // 确保执行结束
+    $done();
 }
 
 // 获取Cookie
@@ -95,6 +94,7 @@ function getCookie() {
     $notify(cookieName, "提示", "请访问QQ空间获取Cookie");
     $prefs.setValueForKey("", cookieKey);
     $task.openUrl("https://qzone.qq.com");
+    $done();
 }
 
 // ========================= 主执行逻辑 =========================
@@ -102,23 +102,16 @@ if (typeof $request !== 'undefined') {
     // 通过重写规则触发，用于获取Cookie
     const requestUrl = $request.url;
     
-    // 只处理特定请求，避免过多触发
-    if (requestUrl.includes("qzone.qq.com") && 
-        (requestUrl.includes("index.html") || 
-         requestUrl.includes("portal.html") ||
-         requestUrl.includes("main.html"))) {
-        
+    // 只处理特定请求
+    if (requestUrl.includes("qzone.qq.com")) {
         const cookie = $request.headers["Cookie"] || $request.headers["cookie"];
         if (cookie) {
-            const oldCookie = $prefs.valueForKey(cookieKey);
-            if (cookie !== oldCookie) {
-                $prefs.setValueForKey(cookie, cookieKey);
-                $notify(cookieName, "成功", "✅ Cookie已更新");
-            }
+            $prefs.setValueForKey(cookie, cookieKey);
+            $notify(cookieName, "成功", "✅ Cookie已更新");
         }
     }
     
-    // 必须调用$done()结束请求
+    // 结束请求
     $done({});
 } else {
     // 手动执行（定时任务或手动运行）
