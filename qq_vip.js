@@ -1,19 +1,13 @@
-// 名称: QQ会员成长值签到
+// 名称: QQ会员成长值签到 v2.0
 // 描述: 每日自动签到获取QQ会员成长值
-// 作者: unknown
+// 作者: waron
 // 更新时间: 2025-07-07
 // 支持: https://t.me/quantumultx
 // 任务: 0 9 * * *
 
-const $ = new Env("QQ会员成长值签到");
 const cookieName = "QQ空间Cookie";
 const cookieKey = "qq_vip_cookie";
 const apiUrl = "https://act.qzone.qq.com/v2/vip/tx/trpc/subact/ExecAct";
-
-// 从持久化存储获取Cookie
-function getPersistentCookie() {
-    return $.getdata(cookieKey);
-}
 
 // 计算g_tk (与Python算法一致)
 function calculateGtk(cookie) {
@@ -30,17 +24,17 @@ function calculateGtk(cookie) {
 
 // 执行签到请求
 function qqVipSign() {
-    const cookie = getPersistentCookie();
+    const cookie = $prefs.valueForKey(cookieKey);
     if (!cookie) {
-        $.log("❌ 未找到有效的Cookie，请通过MitM获取");
-        $.msg($.name, "未找到Cookie", "请访问QQ空间后重试");
+        console.log("❌ 未找到有效的Cookie，请通过MitM获取");
+        $notify(cookieName, "未找到Cookie", "请访问QQ空间后重试");
         return;
     }
 
     const gtk = calculateGtk(cookie);
     if (!gtk) {
-        $.log("❌ g_tk计算失败，请检查Cookie格式");
-        $.msg($.name, "g_tk计算失败", "请更新Cookie");
+        console.log("❌ g_tk计算失败，请检查Cookie格式");
+        $notify(cookieName, "g_tk计算失败", "请更新Cookie");
         return;
     }
 
@@ -60,61 +54,61 @@ function qqVipSign() {
 
     const url = `${apiUrl}?ADTAG=chouti&g_tk=${gtk}`;
 
-    $.post({
+    const request = {
         url: url,
         headers: headers,
         body: JSON.stringify(payload),
-        timeout: 10000
-    }, (error, response, data) => {
-        if (error) {
-            $.log(`⚠️ 请求异常: ${error}`);
-            $.msg($.name, "请求失败", error);
-            return;
-        }
+        timeout: 10
+    };
 
+    $task.fetch(request).then(response => {
         try {
-            const result = JSON.parse(data);
+            const result = JSON.parse(response.body);
             if (result.Code === 0) {
                 try {
                     const dataObj = JSON.parse(result.Data);
                     const reward = dataObj.op[0].packet[0].name;
-                    $.log(`✅ 签到成功！获得奖励: ${reward}`);
-                    $.msg($.name, "签到成功", `获得奖励: ${reward}`);
+                    console.log(`✅ 签到成功！获得奖励: ${reward}`);
+                    $notify(cookieName, "签到成功", `获得奖励: ${reward}`);
                 } catch (e) {
-                    $.log(`✅ 签到成功！`);
-                    $.msg($.name, "签到成功", "奖励解析失败");
+                    console.log(`✅ 签到成功！`);
+                    $notify(cookieName, "签到成功", "奖励解析失败");
                 }
             } else {
                 const msg = result.Msg || "未知错误";
-                $.log(`❌ 签到失败: ${msg}`);
+                console.log(`❌ 签到失败: ${msg}`);
                 if (msg.includes("登录态") || msg.includes("未登录")) {
-                    $.msg($.name, "Cookie失效", "请更新Cookie");
+                    $notify(cookieName, "Cookie失效", "请更新Cookie");
                 } else {
-                    $.msg($.name, "签到失败", msg);
+                    $notify(cookieName, "签到失败", msg);
                 }
             }
         } catch (e) {
-            $.log(`❌ 响应解析失败: ${e}`);
-            $.msg($.name, "响应解析失败", "请检查日志");
+            console.log(`❌ 响应解析失败: ${e}`);
+            $notify(cookieName, "响应解析失败", "请检查日志");
         }
+    }, reason => {
+        console.log(`⚠️ 请求异常: ${reason.error}`);
+        $notify(cookieName, "请求异常", reason.error);
     });
 }
 
-// MitM获取Cookie
-$.isRequest = typeof $request !== "undefined";
-if ($.isRequest) {
+// 主执行逻辑
+if (typeof $request !== "undefined") {
+    // MitM获取Cookie
     if ($request.url.includes("qzone.qq.com")) {
         const cookie = $request.headers["Cookie"] || $request.headers["cookie"];
         if (cookie) {
-            $.setdata(cookie, cookieKey);
-            $.log(`✅ 成功获取 ${cookieName}`);
-            $.msg($.name, "Cookie更新成功", "请禁用此脚本");
+            $prefs.setValueForKey(cookie, cookieKey);
+            console.log(`✅ 成功获取 ${cookieName}`);
+            $notify(cookieName, "Cookie更新成功", "请禁用此脚本");
         }
     }
-    $.done();
+    $done({});
 } else {
-    $.log(`\n${"=".repeat(30)}`);
-    $.log(`QQ空间会员成长值签到任务开始`);
-    $.log(`${"=".repeat(30)}\n`);
+    // 执行签到任务
+    console.log(`\n${"=".repeat(30)}`);
+    console.log(`QQ空间会员成长值签到任务开始`);
+    console.log(`${"=".repeat(30)}\n`);
     qqVipSign();
 }
